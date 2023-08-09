@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upgrade Date Calculator & Block Height Selector</title>
+</head>
+<body>
+    <h1>Upgrade Date Calculator</h1>
+
+    <form id="upgrade-form">
+        <label for="upgrade-date">Select Desired Upgrade Date:</label>
+        <input type="date" id="upgrade-date" name="upgrade-date" required>
+        <button type="submit">Calculate</button>
+    </form>
+
+    <div id="result" style="display: none;">
+        <h2>Upgrade Schedule:</h2>
+        <p><strong>Testnet Update Deadline:</strong> <span id="testnet-date"></span></p>
+        <p><strong>Gov Proposal Deadline:</strong> <span id="gov-proposal-date"></span></p>
+    </div>
+
+    <div id="block-height-section" style="display: none;">
+        <h1>Upgrade Block Height Selector</h1>
+        <p id="date-error" style="color: red; display: none;">Error: Gov Proposal Date should be before the Gov Proposal Deadline.</p>
+        <form id="block-height-form">
+            <label for="gov-proposal-block-height">Gov Proposal Block Height:</label>
+            <input type="number" id="gov-proposal-block-height" name="gov-proposal-block-height" required>
+
+            <label for="avg-block-time">Avg Block Time in Seconds:</label>
+            <input type="number" step="0.0001" id="avg-block-time" name="avg-block-time" required value="5.84">
+
+            <label for="gov-prop-date">Gov Proposal Date:</label>
+            <input type="datetime-local" id="gov-prop-date" name="gov-prop-date" required value="">
+            
+            <button type="submit">Calculate</button>
+        </form>
+    </div>
+
+    <div id="block-height-result" style="display: none;">
+        <h2>Expected Upgrade Block Height:</h2>
+        <p><strong>Block Height:</strong> <span id="expected-block-height"></span></p>
+    </div>
+
+    <script>
+        document.getElementById("upgrade-form").addEventListener("submit", function(event) {
+            event.preventDefault();
+
+            const upgradeDate = new Date(document.getElementById("upgrade-date").value);
+            upgradeDate.setUTCHours(16, 0, 0, 0);
+
+            const govProposalDate = new Date(upgradeDate);
+            govProposalDate.setHours(govProposalDate.getHours() - (5 * 24 + 5)); // 5 days for gov prop, 5 hours for block drift
+
+            const testnetDate = new Date(govProposalDate);
+            testnetDate.setHours(testnetDate.getHours() - 48);
+
+            document.getElementById("testnet-date").textContent = testnetDate.toString();
+            document.getElementById("gov-proposal-date").textContent = govProposalDate.toString();
+
+            document.getElementById("result").style.display = "block";
+
+            // Display the Upgrade Block Height Selector section
+            document.getElementById("block-height-section").style.display = "block";
+        });
+
+        document.getElementById("block-height-form").addEventListener("submit", function(event) {
+            event.preventDefault();
+
+            const govProposalBlockHeight = parseInt(document.getElementById("gov-proposal-block-height").value);
+            const avgBlockTime = parseFloat(document.getElementById("avg-block-time").value);
+            const govPropDate = new Date(document.getElementById("gov-prop-date").value);
+            const govProposalDeadline = new Date(document.getElementById("gov-proposal-date").textContent);
+
+            // Check if the Gov Proposal Date is after the Gov Proposal Deadline
+            if (govPropDate > govProposalDeadline) {
+                document.getElementById("date-error").style.display = "block";
+                return;
+            }
+
+            document.getElementById("date-error").style.display = "none";
+
+            const upgradeDate = new Date(document.getElementById("upgrade-date").value);
+            upgradeDate.setUTCHours(16, 0, 0, 0); 
+
+            const secondsBetween = (upgradeDate - govPropDate) / 1000;
+
+            const blocksUntilUpgrade = secondsBetween / avgBlockTime;
+
+            const expectedBlockHeight = govProposalBlockHeight + blocksUntilUpgrade;
+
+            document.getElementById("expected-block-height").textContent = Math.round(expectedBlockHeight);
+            document.getElementById("block-height-result").style.display = "block";
+        });
+
+        // Function to fetch latest block height from the given URL
+        async function fetchLatestBlockHeight() {
+            try {
+                const response = await fetch("https://rpc.osmosis.zone/status?");
+                const data = await response.json();
+                return data.result.sync_info.latest_block_height;
+            } catch (error) {
+                console.error("Error fetching block height:", error);
+                return null;
+            }
+        }
+
+        // Set the Gov Proposal Block Height to the fetched value
+        (async function setGovProposalBlockHeight() {
+            const blockHeight = await fetchLatestBlockHeight();
+            if (blockHeight) {
+                document.getElementById("gov-proposal-block-height").value = blockHeight;
+            }
+        })();
+        
+        // Set the current datetime as the default value for gov-prop-date input
+        document.getElementById("gov-prop-date").value = new Date().toISOString().slice(0, 16);
+    </script>
+</body>
+</html>
